@@ -1,5 +1,10 @@
 package com.mambu.ant;
 
+import java.io.File;
+
+import org.apache.tools.ant.Task;
+
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.BasicAWSCredentials;
@@ -9,16 +14,13 @@ import com.amazonaws.services.elasticbeanstalk.model.S3Location;
 import com.amazonaws.services.elasticbeanstalk.model.UpdateEnvironmentRequest;
 import com.amazonaws.services.s3.AmazonS3Client;
 
-import org.apache.tools.ant.Task;
-
-import java.io.File;
-
 /**
  * Ant target for uploading war files to S3 and connect them to a elastic beanstalk environment
  */
 public class ElasticBeanstalkUpload extends Task {
 
-	private String endpoint = "elasticbeanstalk.us-east-1.amazonaws.com";
+	private String s3Endpoint = "s3.amazonaws.com";
+	private String beanstalkEndpoint = "elasticbeanstalk.us-east-1.amazonaws.com";
 	private String s3Bucket;
 	private String applicationName;
 	private String versionLabel;
@@ -26,12 +28,18 @@ public class ElasticBeanstalkUpload extends Task {
 	private String warFileLocation;
 	private String awsAccessKey;
 	private String awsSecretKey;
+	private boolean uploadToS3 = true;
 	private boolean createApplicationVersion = true;
 	private boolean deployApplicationVersion = true;
 	private String environmentName;
 
+	/**
+	 * Endpoint for S3, defaults to s3.amazonaws.com
+	 * 
+	 * @param endpoint
+	 */
 	public void setEndpoint(String endpoint) {
-		this.endpoint = endpoint;
+		this.s3Endpoint = endpoint;
 	}
 
 	public void setApplicationName(String applicationName) {
@@ -74,11 +82,25 @@ public class ElasticBeanstalkUpload extends Task {
 		this.environmentName = environmentName;
 	}
 
+	public void setUploadToS3(String uploadToS3) {
+		this.uploadToS3 = Boolean.parseBoolean(uploadToS3);
+	}
+
+	/**
+	 * @param beanstalkEndpoint
+	 *            the beanstalkEndpoint to set
+	 */
+	public void setBeanstalkEndpoint(String beanstalkEndpoint) {
+		this.beanstalkEndpoint = beanstalkEndpoint;
+	}
+
 	public void execute() throws org.apache.tools.ant.BuildException {
+
+		System.out.println("Beanstalk Ant Task Started");
 
 		AWSCredentials credentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
 		ClientConfiguration configuration = new ClientConfiguration();
-		
+
 		// Configure proxy if the properties are set, use HTTPS namespace since
 		// all connections to AWS are over HTTPS
 		String proxyHost = System.getProperty("https.proxyHost");
@@ -87,7 +109,7 @@ public class ElasticBeanstalkUpload extends Task {
 		String proxyPass = System.getProperty("https.proxyPass");
 
 		// If the default Java variables weren't set, try to use environment variables
-		if(proxyHost == null && proxyPort == null) {
+		if (proxyHost == null && proxyPort == null) {
 			String proxyDef = System.getProperty("https_proxy");
 			if (proxyDef != null) {
 				String[] split = proxyDef.split(":");
@@ -109,33 +131,67 @@ public class ElasticBeanstalkUpload extends Task {
 			configuration.setProxyPassword(proxyPass);
 		}
 
-		System.out.printf("Deploying '%s' as version '%s' to environment '%s' for application '%s' at endpoint '%s' with access key ID '%s'\n",
-				warFileLocation, versionLabel, environmentName, applicationName, endpoint, awsAccessKey);
-
 		// upload war file to S3
-		AmazonS3Client s3Client = new AmazonS3Client(credentials, configuration);
-		File warFile = new File(warFileLocation);
-		s3Client.putObject(s3Bucket, s3Key, warFile);
+		if (uploadToS3) {
+
+			System.out.printf(
+					"- Uploading '%s' to S3 bucket '%s' under '%s' using S3 endpoint '%s' with access key ID '%s'\n",
+					warFileLocation, s3Bucket, s3Key, s3Endpoint, awsAccessKey);
+
+			AmazonS3Client s3Client = new AmazonS3Client(credentials, configuration);
+			s3Client.setEndpoint(s3Endpoint);
+			File warFile = new File(warFileLocation);
+			s3Client.putObject(s3Bucket, s3Key, warFile);
+		}
 
 		AWSElasticBeanstalkClient client = new AWSElasticBeanstalkClient(credentials, configuration);
-		client.setEndpoint(endpoint);
+		client.setEndpoint(beanstalkEndpoint);
 
 		// use war file in S3 to create new application version
 		if (createApplicationVersion) {
-			S3Location sourceBundle = new S3Location(s3Bucket, s3Key);
-			CreateApplicationVersionRequest createApplicationVersionRequest = new CreateApplicationVersionRequest(
-					applicationName, versionLabel);
-			createApplicationVersionRequest.withSourceBundle(sourceBundle);
-			client.createApplicationVersion(createApplicationVersionRequest);
+
+			try {
+
+				System.out
+						.printf("- Creating Application Version for S3 Object '%s/%s' as version '%s' to environment '%s' for application '%s' via Beanstalk endpoint '%s' with access key ID '%s'\n",
+								s3Bucket, s3Key, versionLabel, environmentName, applicationName, beanstalkEndpoint,
+								awsAccessKey);
+
+				S3Location sourceBundle = new S3Location(s3Bucket, s3Key);
+				CreateApplicationVersionRequest createApplicationVersionRequest = new CreateApplicationVersionRequest(
+						applicationName, versionLabel);
+				createApplicationVersionRequest.withSourceBundle(sourceBundle);
+				client.createApplicationVersion(createApplicationVersionRequest);
+
+			} catch (AmazonServiceException e) {
+				System.out.println("\nAn error occurred during creation of the application version: ");
+				e.printStackTrace();
+
+				// for some reason stack trace log output is mixed up otherwise
+				try {
+					Thread.sleep(200);
+				} catch (InterruptedException e1) {
+					// ignore
+				}
+
+				System.out.println("\nContinuing with next step ...\n");
+			}
 		}
 
 		// deploy new version
 		if (deployApplicationVersion) {
+
+			System.out
+					.printf("- Deploying version '%s' to environment '%s' for application '%s' via Beanstalk endpoint '%s' with access key ID '%s'\n",
+							versionLabel, environmentName, applicationName, beanstalkEndpoint, awsAccessKey);
+
 			UpdateEnvironmentRequest updateEnvironmentRequest = new UpdateEnvironmentRequest();
 			updateEnvironmentRequest.setVersionLabel(versionLabel);
 			updateEnvironmentRequest.setEnvironmentName(environmentName);
 			client.updateEnvironment(updateEnvironmentRequest);
 		}
+
+		System.out.println("Beanstalk Ant Task Finished");
 
 	}
 }
