@@ -34,12 +34,13 @@ public class ElasticBeanstalkUpload extends Task {
 	private String environmentName;
 
 	/**
-	 * Endpoint for S3, defaults to s3.amazonaws.com
+	 * Endpoint for Elastic Beanstalk, defaults to elasticbeanstalk.us-east-1.amazonaws.com
 	 * 
-	 * @param endpoint
+	 * @param beanstalkEndpoint
+	 *            the beanstalkEndpoint to set
 	 */
-	public void setEndpoint(String endpoint) {
-		this.s3Endpoint = endpoint;
+	public void setEndpoint(String beanstalkEndpoint) {
+		this.beanstalkEndpoint = beanstalkEndpoint;
 	}
 
 	public void setApplicationName(String applicationName) {
@@ -87,11 +88,13 @@ public class ElasticBeanstalkUpload extends Task {
 	}
 
 	/**
-	 * @param beanstalkEndpoint
-	 *            the beanstalkEndpoint to set
+	 * Endpoint for S3, defaults to s3.amazonaws.com
+	 * 
+	 * @param s3Endpoint
+	 *            the s3Endpoint to set
 	 */
-	public void setBeanstalkEndpoint(String beanstalkEndpoint) {
-		this.beanstalkEndpoint = beanstalkEndpoint;
+	public void setS3Endpoint(String s3Endpoint) {
+		this.s3Endpoint = s3Endpoint;
 	}
 
 	public void execute() throws org.apache.tools.ant.BuildException {

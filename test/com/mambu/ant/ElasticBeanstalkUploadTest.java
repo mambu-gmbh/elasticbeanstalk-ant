@@ -12,10 +12,10 @@ public class ElasticBeanstalkUploadTest {
 		elasticBeanstalkUpload.setApplicationName("");
 		elasticBeanstalkUpload.setAwsAccessKey("");
 		elasticBeanstalkUpload.setAwsSecretKey("");
-		elasticBeanstalkUpload.setBeanstalkEndpoint("elasticbeanstalk.us-east-1.amazonaws.com");
+		elasticBeanstalkUpload.setS3Endpoint("s3.amazonaws.com");
 		elasticBeanstalkUpload.setCreateApplicationVersion("true");
 		elasticBeanstalkUpload.setDeployApplicationVersion("true");
-		elasticBeanstalkUpload.setEndpoint("s3.amazonaws.com");
+		elasticBeanstalkUpload.setEndpoint("elasticbeanstalk.us-east-1.amazonaws.com");
 		elasticBeanstalkUpload.setEnvironmentName("");
 		elasticBeanstalkUpload.setS3Bucket("");
 		elasticBeanstalkUpload.setS3Key("");
